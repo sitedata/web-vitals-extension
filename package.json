@@ -1,9 +1,13 @@
 {
   "name": "web-vitals-extension",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Instant Web Vitals metrics",
   "main": "src/browser_action/vitals.js",
   "repository": "https://github.com/googlechrome/web-vitals-extension",
+  "homepage": "https://web.dev/vitals",
+  "bugs": {
+    "url": "https://github.com/GoogleChrome/web-vitals-extension/issues"
+  },
   "author": "Google Chrome",
   "license": "Apache-2.0",
   "private": false,
@@ -16,6 +20,6 @@
     "eslint-config-google": "^0.14.0"
   },
   "dependencies": {
-    "web-vitals": "^0.1.0"
+    "web-vitals": "^0.2.2"
   }
 }

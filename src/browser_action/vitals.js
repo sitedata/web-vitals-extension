@@ -12,7 +12,7 @@
 */
 
 (async () => {
-  const src = chrome.runtime.getURL('node_modules/web-vitals/dist/web-vitals.min.js');
+  const src = chrome.runtime.getURL('node_modules/web-vitals/dist/web-vitals.es5.min.js');
   const webVitals = await import(src);
   let overlayClosedForSession = false;
   let latestCLS = {};
@@ -92,10 +92,11 @@
     }) => {
       if (enableOverlay === true && overlayClosedForSession == false) {
         // Overlay
-        const overlayElement = document.getElementById('web-vitals-extension');
+        const overlayElement = document.getElementById('web-vitals-extension-overlay');
         if (overlayElement === null) {
           const overlayElement = document.createElement('div');
-          overlayElement.id = 'web-vitals-extension';
+          overlayElement.id = 'web-vitals-extension-overlay';
+          overlayElement.classList.add('web-vitals-chrome-extension');
           overlayElement.innerHTML = buildOverlayTemplate(metrics, tabLoadedInBackground);
           document.body.appendChild(overlayElement);
         } else {
@@ -142,7 +143,7 @@
    */
   function getTimestamp() {
     const date = new Date();
-    return date.toLocaleTimeString('en-US', {hour12: false});
+    return date.toLocaleTimeString('en-US', {hourCycle: 'h23'});
   }
 
 
@@ -186,16 +187,24 @@
  * DEBOUNCE_DELAY timeout if invoked more than once during
  * the wait timeout.
  */
-  const debouncedCLSBroadcast = _.debounce(broadcastCLS, DEBOUNCE_DELAY, {
-    leading: true,
-    trailing: true,
-    maxWait: 5000});
-
+  let debouncedCLSBroadcast = () => {};
+  if (_ !== undefined) {
+    debouncedCLSBroadcast = _.debounce(broadcastCLS, DEBOUNCE_DELAY, {
+      leading: true,
+      trailing: true,
+      maxWait: 1000});
+  }
   /**
  *
  * Fetches Web Vitals metrics via WebVitals.js
  */
   function fetchWebPerfMetrics() {
+    // web-vitals.js doesn't have a way to remove previous listeners, so we'll save whether
+    // we've already installed the listeners before installing them again.
+    // See https://github.com/GoogleChrome/web-vitals/issues/55.
+    if (self._hasInstalledPerfMetrics) return;
+    self._hasInstalledPerfMetrics = true;
+
     webVitals.getCLS((metric) => {
       // As CLS values can fire frequently in the case
       // of animations or highly-dynamic content, we
@@ -231,7 +240,7 @@
           <div class="lh-metric__innerwrap">
             <div>
               <span class="lh-metric__title">
-                Largest Contentful Paint 
+                Largest Contentful Paint${' '}
                   <span class="lh-metric-state">${metrics.lcp.final ? '' : '(might change)'}</span></span>
                   ${tabLoadedInBackground ? '<span class="lh-metric__subtitle">Value inflated as tab was loaded in background</span>' : ''}
             </div>
@@ -241,7 +250,7 @@
         <div class="lh-metric lh-metric--${metrics.fid.pass ? 'pass':'fail'}">
           <div class="lh-metric__innerwrap">
             <span class="lh-metric__title">
-              First Input Delay 
+              First Input Delay${' '}
                 <span class="lh-metric-state">${metrics.fid.final ? '' : '(waiting for input)'}</span></span>
             <div class="lh-metric__value">${metrics.fid.final ? `${metrics.fid.value.toFixed(2)}&nbsp;ms` : ''}</div>
           </div>
@@ -249,7 +258,7 @@
         <div class="lh-metric lh-metric--${metrics.cls.pass ? 'pass':'fail'}">
           <div class="lh-metric__innerwrap">
             <span class="lh-metric__title">
-              Cumulative Layout Shift 
+              Cumulative Layout Shift${' '}
                 <span class="lh-metric-state">${metrics.cls.final ? '' : '(might change)'}</span></span>
             <div class="lh-metric__value">${metrics.cls.value.toFixed(3)}&nbsp;</div>
           </div>
