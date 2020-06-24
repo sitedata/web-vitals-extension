@@ -12,11 +12,22 @@
 */
 
 const FIELD_ENABLED = true;
-const API_KEY = 'AIzaSyAYyG49bJCCRiXqm1OmZitelBaZ4ZXB5Ro';
-const API_URL = 'https://chromeuxreport.googleapis.com/v1/records:queryRecord';
-const FE_URL = 'https://developers.google.com/speed/pagespeed/insights/';
-const encodedUrl = '';
-let resultsFetched = false;
+const PSI_URL = 'https://developers.google.com/speed/pagespeed/insights/';
+
+const CrUXApiUtil = {};
+CrUXApiUtil.API_KEY = 'AIzaSyAYyG49bJCCRiXqm1OmZitelBaZ4ZXB5Ro';
+CrUXApiUtil.API_ENDPOINT = `https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${CrUXApiUtil.API_KEY}`;
+CrUXApiUtil.query = function (requestBody) {
+  return fetch(CrUXApiUtil.API_ENDPOINT, {
+    method: 'POST',
+    body: JSON.stringify(requestBody)
+  }).then(response => response.json()).then(response => {
+    if (response.error) {
+      return Promise.reject(response);
+    }
+    return response;
+  });
+};
 
 /**
  *
@@ -42,43 +53,28 @@ function hashCode(str) {
 
 /**
  *
- * Fetches API results from CrUX API endpoint
+ * Fetches field data from the CrUX API endpoint.
  * @param {String} url
- * @returns
  */
-async function fetchAPIResults(url) {
+function fetchCrUXResults(url) {
   if (!FIELD_ENABLED) {
-    return;
-  }
-  if (resultsFetched) {
     return;
   }
 
   url = new URL(url);
 
-  const query = {
+  const requestBody = {
     // TODO(rviscomi): Consider querying by URL instead.
     'origin': url.origin,
     'formFactor': 'desktop'
   };
 
-  fetch(`${API_URL}?key=${API_KEY}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(query),
-  })
-  .then(response => response.json())
-  .then(response => {
-    if ('error' in response) {
-      return Promise.reject(response.error);
-    }
-    console.log('CrUX API response:', response);
-    createPSITemplate(response);
+  CrUXApiUtil.query(requestBody).then(response => {
+    chrome.extension.getBackgroundPage().console.log('CrUX API response:', response);
+    createCWVTemplate(response);
   })
   .catch(error => {
-    console.error('CrUX API error:', error);
+    chrome.extension.getBackgroundPage().console.error('CrUX API error:', error);
     const el = document.getElementById('report');
     el.innerHTML = `We were unable to process your request.`;
   });
@@ -86,29 +82,27 @@ async function fetchAPIResults(url) {
 
 /**
  *
- * Build the PSI template to render in the pop-up
+ * Build the CWV template to render in the pop-up
  * @param {Object} result
  */
-function createPSITemplate(result) {
+function createCWVTemplate(response) {
   if (!FIELD_ENABLED) {
     return;
   }
 
-  const metrics = result.record.metrics;
-  const lcp = metrics['largest_contentful_paint'];
-  const fid = metrics['first_input.delay'];
-  const cls = metrics['layout_instability.cumulative_layout_shift'];
+  const metrics = response.record.metrics;
+  const lcp = metrics.largest_contentful_paint;
+  const fid = metrics.first_input_delay;
+  const cls = metrics.cumulative_layout_shift;
   const overall_category = getSummaryPerformanceLabel(lcp, fid, cls);
 
   const lcp_template = buildDistributionTemplate(lcp, 'Largest Contentful Paint (LCP)');
   const fid_template = buildDistributionTemplate(fid, 'First Input Delay (FID)');
   const cls_template = buildDistributionTemplate(cls, 'Cumulative Layout Shift (CLS)');
-  const link_template = buildPSILink(result.record.key.origin);
+  const link_template = buildPSILink(response.record.key.origin);
   const tmpl = `<h1>Origin Performance (${overall_category})</h1> ${lcp_template} ${fid_template} ${cls_template} ${link_template}`;
   const el = document.getElementById('report');
   el.innerHTML = tmpl;
-  // TODO: Implement per-tab/URL report caching scheme
-  resultsFetched = true;
 }
 
 /**
@@ -246,15 +240,14 @@ function buildDistributionTemplate(metric, label) {
 
 function buildPSILink(url) {
   const encodedUrl = encodeURIComponent(url);
-  return `<br><a href='${FE_URL}?url=${encodedUrl}' target='_blank'>
+  return `<br><a href='${PSI_URL}?url=${encodedUrl}' target='_blank'>
        View Report on PageSpeed Insights</a>`;
 }
 
 chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
   const thisTab = tabs[0];
-  // TODO: Re-enable PSI support once LCP, CLS land
   if (FIELD_ENABLED) {
-    fetchAPIResults(thisTab.url);
+    fetchCrUXResults(thisTab.url);
   }
 
   // Retrieve the stored latest metrics
